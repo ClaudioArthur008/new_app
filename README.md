@@ -53,8 +53,6 @@ Si Supabase n’est pas configuré, les écrans d’actualités restent accessib
 flutter analyze
 flutter test
 ```
-
-Les tests du repository vérifient la réponse fraîche, le repli hors ligne sur le cache et le message d’erreur quand aucune copie n’est disponible.
 =======
 # real_app
 Projet pour l'obtention du certificat en Connected app with real backend durant la FlutterFire Summer Camp.

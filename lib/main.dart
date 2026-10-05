@@ -200,7 +200,7 @@ class _HeadlinesPageState extends State<HeadlinesPage> {
     _load();
   }
 
-  void _load() => _future = widget.repository.getHeadlines(country: 'fr');
+  void _load() => _future = widget.repository.getHeadlines(country: 'us');
   Future<void> _refresh() async {
     setState(_load);
     await _future;
@@ -251,7 +251,7 @@ class _CategoryPageState extends State<CategoryPage> {
   }
 
   void _load() => _future = widget.repository.getHeadlines(
-    country: 'fr',
+      country: 'us',
     category: _selected,
   );
   @override

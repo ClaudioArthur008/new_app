@@ -75,7 +75,6 @@ class DioNewsRemoteSource implements NewsRemoteSource {
   Future<List<NewsArticle>> search(String query) => _get('/everything', {
     'q': query,
     'sortBy': 'publishedAt',
-    'language': 'en',
   });
 
   Future<List<NewsArticle>> _get(
