@@ -48,9 +48,9 @@ Le compte e-mail/mot de passe utilise les endpoints Supabase Auth `signup`, `tok
 
 La connexion Google est optionnelle. Pour l’activer :
 
-1. Dans Supabase, ouvrez **Authentication → Providers → Google** et configurez l’identifiant client et le secret OAuth Google.
-2. Dans **Authentication → URL Configuration → Redirect URLs**, ajoutez `lebrief://login-callback`.
-3. Configurez le même schéma de redirection dans la console OAuth Google, puis relancez l’application.
+1. Dans Supabase, ouvrez **Authentication → Providers → Google** et activez le fournisseur. Créez un client OAuth de type **Web application** dans Google Cloud, puis copiez son identifiant et son secret dans Supabase.
+2. Dans la console Google Cloud, ajoutez comme URI de redirection autorisée l’URL de rappel Supabase affichée dans la configuration du fournisseur Google (elle se termine par `/auth/v1/callback`).
+3. Dans Supabase, ouvrez **Authentication → URL Configuration → Redirect URLs** et ajoutez `lebrief://login-callback`, qui renvoie vers l’application mobile.
 
 La configuration native déclare ce lien profond sur Android et iOS. Désactivez **Confirm email** dans Supabase uniquement si vous souhaitez tester l’inscription sans vérification de boîte de réception.
 
