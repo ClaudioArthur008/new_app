@@ -7,12 +7,16 @@ class SessionInterceptor extends Interceptor {
     required this.session,
     required this.supabaseUrl,
     required this.anonKey,
+    required this.refreshClient,
+    required this.replayClient,
   });
 
   final SessionStore session;
   final String supabaseUrl;
   final String anonKey;
-  bool _refreshing = false;
+  final Dio refreshClient;
+  final Dio replayClient;
+  Future<String?>? _refreshing;
 
   @override
   void onRequest(
@@ -37,7 +41,9 @@ class SessionInterceptor extends Interceptor {
         err.requestOptions.path.contains('/auth/v1/token') ||
         err.requestOptions.path.contains('/auth/v1/signup') ||
         err.requestOptions.path.contains('/auth/v1/logout');
-    if (err.response?.statusCode != 401 || isAuthRoute || _refreshing) {
+    if (err.response?.statusCode != 401 ||
+        isAuthRoute ||
+        err.requestOptions.extra['authRetry'] == true) {
       handler.next(err);
       return;
     }
@@ -48,28 +54,55 @@ class SessionInterceptor extends Interceptor {
       return;
     }
 
-    _refreshing = true;
+    final accessToken = await _refreshAccessToken(refreshToken);
+    if (accessToken == null) {
+      handler.next(err);
+      return;
+    }
     try {
-      final response = await Dio().post<Map<String, dynamic>>(
+      final retry = err.requestOptions;
+      retry.headers['Authorization'] = 'Bearer $accessToken';
+      retry.extra['authRetry'] = true;
+      handler.resolve(await replayClient.fetch<dynamic>(retry));
+    } on DioException catch (retryError) {
+      handler.next(retryError);
+    }
+  }
+
+  Future<String?> _refreshAccessToken(String refreshToken) {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+    final refresh = _performRefresh(refreshToken);
+    _refreshing = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshing, refresh)) _refreshing = null;
+    });
+  }
+
+  Future<String?> _performRefresh(String refreshToken) async {
+    try {
+      final response = await refreshClient.post<Map<String, dynamic>>(
         '$supabaseUrl/auth/v1/token',
         queryParameters: {'grant_type': 'refresh_token'},
         options: Options(headers: {'apikey': anonKey}),
         data: {'refresh_token': refreshToken},
       );
-      final data = response.data!;
+      final data = response.data ?? const <String, dynamic>{};
+      final accessToken = data['access_token'] as String?;
+      if (accessToken == null) {
+        throw const FormatException('Missing access token');
+      }
       await session.save(
-        accessToken: data['access_token'] as String,
+        accessToken: accessToken,
         refreshToken: data['refresh_token'] as String? ?? refreshToken,
       );
-      final retry = err.requestOptions;
-      retry.headers['Authorization'] = 'Bearer ${data['access_token']}';
-      final retried = await Dio().fetch<dynamic>(retry);
-      handler.resolve(retried);
-    } on DioException catch (refreshError) {
+      return accessToken;
+    } on DioException {
       await session.clear();
-      handler.next(refreshError);
-    } finally {
-      _refreshing = false;
+      return null;
+    } on FormatException {
+      await session.clear();
+      return null;
     }
   }
 

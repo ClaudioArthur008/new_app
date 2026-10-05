@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -36,21 +37,41 @@ Future<void> main() async {
     session: session,
     supabaseUrl: supabaseUrl,
     anonKey: supabaseKey,
+    refreshClient: Dio(),
+    replayClient: Dio(),
   );
   final newsDio = Dio(
     BaseOptions(
       baseUrl: 'https://newsapi.org/v2',
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 12),
       headers: {if (newsKey.isNotEmpty) 'X-Api-Key': newsKey},
     ),
   )..interceptors.add(interceptor);
-  final authDio = Dio(BaseOptions(baseUrl: supabaseUrl))
-    ..interceptors.add(interceptor);
+  final authDio = Dio(
+    BaseOptions(
+      baseUrl: supabaseUrl,
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 12),
+    ),
+  )..interceptors.add(interceptor);
   final news = NewsRepository(
     remote: DioNewsRemoteSource(newsDio),
     cache: cache,
   );
-  final auth = AuthState(AuthRepository(dio: authDio, session: session));
+  final auth = AuthState(
+    AuthRepository(
+      dio: authDio,
+      session: session,
+      supabaseUrl: supabaseUrl,
+      publishableKey: supabaseKey,
+    ),
+  );
   await auth.initialize();
+  final appLinks = AppLinks();
+  appLinks.uriLinkStream.listen(auth.handleOAuthCallback);
+  final initialUri = await appLinks.getInitialLink();
+  if (initialUri != null) await auth.handleOAuthCallback(initialUri);
   runApp(
     PressApp(
       news: news,
@@ -251,7 +272,7 @@ class _CategoryPageState extends State<CategoryPage> {
   }
 
   void _load() => _future = widget.repository.getHeadlines(
-      country: 'us',
+    country: 'us',
     category: _selected,
   );
   @override
@@ -698,6 +719,13 @@ class _AccountPageState extends State<AccountPage> {
                     )
                   : Text(_register ? 'Créer mon compte' : 'Se connecter'),
             ),
+            OutlinedButton.icon(
+              onPressed: widget.auth.busy
+                  ? null
+                  : () => widget.auth.signInWithGoogle(),
+              icon: const Icon(Icons.g_mobiledata_rounded),
+              label: const Text('Continuer avec Google'),
+            ),
             TextButton(
               onPressed: () => setState(() {
                 _register = !_register;
@@ -779,7 +807,7 @@ class ApiSetupBanner extends StatelessWidget {
           child: Text(
             auth
                 ? 'Configurez SUPABASE_URL et SUPABASE_ANON_KEY pour activer inscription et connexion.'
-                : 'Ajoutez votre clé NewsAPI dans lib/config/app_config.dart pour charger les articles.',
+                : 'Configurez NEWS_API_KEY pour charger les articles (voir le README).',
             style: const TextStyle(color: _ink, height: 1.35),
           ),
         ),

@@ -29,23 +29,42 @@ Installez Flutter, puis récupérez les dépendances :
 flutter pub get
 ```
 
-Ouvrez `lib/config/app_config.dart` et renseignez les trois constantes avec vos valeurs locales :
+Ne placez pas de clé API dans un fichier suivi par Git. Passez les valeurs au démarrage de Flutter :
 
-```dart
-static const newsApiKey = 'votre_cle_newsapi';
-static const supabaseUrl = 'https://votre-projet.supabase.co';
-static const supabaseAnonKey = 'votre_cle_anon_supabase';
+```powershell
+flutter run `
+  --dart-define=NEWS_API_KEY=TA_CLE_NEWSAPI `
+  --dart-define=SUPABASE_URL=https://TON_PROJET.supabase.co `
+  --dart-define=SUPABASE_ANON_KEY=TA_CLE_PUBLISHABLE
 ```
 
 Récupérez l’URL et la clé anon/publishable dans le tableau de bord Supabase : **Project Settings → API** (ou **API Keys** selon l’interface). Dans **Authentication → Providers**, activez **Email** pour utiliser inscription et connexion. La clé `anon`/`publishable` est une clé client ; n’utilisez jamais une clé `service_role` dans l’application.
 
-Puis lancez l’application :
+Les valeurs proviennent du tableau de bord NewsAPI et de Supabase. `lib/config/app_config.dart` les lit depuis `String.fromEnvironment`; aucun secret réel n’est commité. Si Supabase n’est pas configuré, les écrans d’actualités restent accessibles mais les fonctions de compte sont désactivées.
 
-```sh
-flutter run
-```
+## Authentification
 
-Si Supabase n’est pas configuré, les écrans d’actualités restent accessibles mais les fonctions de compte sont désactivées. Si la clé NewsAPI est absente, le cache reste consultable après un premier chargement réussi. Laisse les valeurs vides dans toute version publiée du dépôt public et renseigne-les uniquement dans ta copie locale.
+Le compte e-mail/mot de passe utilise les endpoints Supabase Auth `signup`, `token?grant_type=password` et `logout`. Les jetons sont conservés par `flutter_secure_storage`. L’intercepteur ajoute la clé publishable et le jeton aux seules requêtes adressées au projet Supabase. Sur une réponse `401`, une seule requête de renouvellement est partagée entre les appels concurrents ; la requête d’origine est ensuite rejouée une fois. Les jetons sont effacés si le renouvellement échoue.
+
+La connexion Google est optionnelle. Pour l’activer :
+
+1. Dans Supabase, ouvrez **Authentication → Providers → Google** et configurez l’identifiant client et le secret OAuth Google.
+2. Dans **Authentication → URL Configuration → Redirect URLs**, ajoutez `lebrief://login-callback`.
+3. Configurez le même schéma de redirection dans la console OAuth Google, puis relancez l’application.
+
+La configuration native déclare ce lien profond sur Android et iOS. Désactivez **Confirm email** dans Supabase uniquement si vous souhaitez tester l’inscription sans vérification de boîte de réception.
+
+## Gestion des erreurs et mode hors ligne
+
+Les réponses NewsAPI sont mises en cache dans Hive par rubrique et par recherche. Les erreurs réseau affichent les articles enregistrés avec un indicateur hors ligne ; sans cache, l’interface affiche un message lisible et un bouton Réessayer. Les erreurs de compte distinguent les identifiants refusés, les problèmes réseau et les réponses renvoyées par Supabase. Cette app utilise uniquement les ressources de lecture de NewsAPI.
+
+## Intégration continue
+
+Le workflow `.github/workflows/flutter.yml` vérifie le formatage, l’analyse statique et les tests avec Flutter stable à chaque push et pull request vers `main`. Il produit également un rapport de couverture dans les artefacts de test.
+
+## Notes de déploiement
+
+Les tests du projet sont des tests unitaires du repository avec des sources simulées ; ils n’appellent pas les services distants. Avant une mise en production, ajouter des tests du flux OAuth sur appareil et des tests d’intégration réseau. La clé publishable Supabase est prévue pour le client, mais ne jamais y mettre une clé `secret`/`service_role`. La clé NewsAPI reste extractible d’une application mobile ; le forfait Developer est réservé au développement, donc un serveur intermédiaire et un forfait adapté sont nécessaires pour une app publiée.
 
 ## Vérifications
 
@@ -53,6 +72,3 @@ Si Supabase n’est pas configuré, les écrans d’actualités restent accessib
 flutter analyze
 flutter test
 ```
-=======
-# real_app
-Projet pour l'obtention du certificat en Connected app with real backend durant la FlutterFire Summer Camp.

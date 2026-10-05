@@ -72,10 +72,8 @@ class DioNewsRemoteSource implements NewsRemoteSource {
     String? category,
   }) => _get('/top-headlines', {'country': country, 'category': ?category});
   @override
-  Future<List<NewsArticle>> search(String query) => _get('/everything', {
-    'q': query,
-    'sortBy': 'publishedAt',
-  });
+  Future<List<NewsArticle>> search(String query) =>
+      _get('/everything', {'q': query, 'sortBy': 'publishedAt'});
 
   Future<List<NewsArticle>> _get(
     String path,
@@ -142,20 +140,47 @@ class NewsRepository {
       await cache.write(key, articles);
       return NewsResult(articles);
     } on DioException catch (error) {
-      final cached = await cache.read(key);
-      if (cached != null) return NewsResult(cached, fromCache: true);
-      final message = error.response?.data is Map
-          ? (error.response!.data as Map)['message'] as String?
-          : null;
-      throw NewsException(
-        message ??
-            (error.type == DioExceptionType.connectionError ||
-                    error.type == DioExceptionType.connectionTimeout
-                ? 'Pas de connexion. Réessayez lorsque le réseau sera disponible.'
-                : 'Impossible de charger les actualités. Vérifiez votre clé NewsAPI.'),
-      );
+      if (_canUseCache(error)) {
+        final cached = await cache.read(key);
+        if (cached != null) return NewsResult(cached, fromCache: true);
+      }
+      throw NewsException(_messageFor(error));
     } on NewsException {
       rethrow;
+    } on FormatException {
+      throw const NewsException(
+        'La réponse NewsAPI est invalide. Réessayez plus tard.',
+      );
     }
+  }
+
+  bool _canUseCache(DioException error) {
+    final status = error.response?.statusCode;
+    return error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        (status != null && status >= 500);
+  }
+
+  String _messageFor(DioException error) {
+    final body = error.response?.data;
+    if (body is Map) {
+      final message = body['message'];
+      if (message is String && message.trim().isNotEmpty) return message;
+    }
+    if (error.response?.statusCode == 401) {
+      return 'Clé NewsAPI invalide ou absente. Vérifiez NEWS_API_KEY.';
+    }
+    if (error.response?.statusCode == 429) {
+      return 'Limite de requêtes NewsAPI atteinte. Réessayez plus tard.';
+    }
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return 'Pas de connexion. Réessayez lorsque le réseau sera disponible.';
+    }
+    return 'Impossible de charger les actualités. Réessayez dans un instant.';
   }
 }

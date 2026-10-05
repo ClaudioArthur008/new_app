@@ -71,4 +71,34 @@ void main() {
       ),
     );
   });
+
+  test(
+    'does not hide an invalid API key behind stale cached content',
+    () async {
+      final request = RequestOptions(path: '/top-headlines');
+      when(() => remote.headlines(country: 'fr', category: null)).thenThrow(
+        DioException(
+          requestOptions: request,
+          response: Response(
+            requestOptions: request,
+            statusCode: 401,
+            data: {'message': 'Invalid API key'},
+          ),
+          type: DioExceptionType.badResponse,
+        ),
+      );
+
+      await expectLater(
+        repository.getHeadlines(country: 'fr'),
+        throwsA(
+          isA<NewsException>().having(
+            (error) => error.message,
+            'message',
+            'Invalid API key',
+          ),
+        ),
+      );
+      verifyNever(() => cache.read(any()));
+    },
+  );
 }
